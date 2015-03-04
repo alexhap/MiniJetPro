@@ -1,3 +1,4 @@
 Manifest-Version: 1.0
+Class-Path: jssc.jar ini4j-0.5.4.jar
 Main-Class: Form
 

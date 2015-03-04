@@ -78,13 +78,9 @@ class Form extends JFrame implements WindowListener, Observer {
         spinCount.addChangeListener(e -> onSpinChange());
         cbPrinterPort.addActionListener(e -> onPrinterPortChange());
         cbActive.addActionListener(e -> onCheckActiveAction());
-
         timerSend = new Timer(100, e -> timerSendAction());
-        timerSend.stop();
         timerMonitor = new Timer(500, e -> timerMonitorAction());
-        timerMonitor.stop();
         timerStatus = new Timer(333, e -> timerStatusAction());
-        timerStatus.stop();
 
         tTasks.addMouseListener(new MouseAdapter() {
             @Override

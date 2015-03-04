@@ -12,7 +12,7 @@ import jssc.SerialPortException;
 class ComCore extends Observable implements Observer{
     private static SerialPort serialPort;
     private boolean StopFlag; // MiniJetPro duplicates last returned "print-end flag" in answer on STOP_PRINT command.
-    private byte[] fragment; // to work with fragmented packets
+    private byte[] fragment; // array for manipulating with fragmented packets
     private int toPrint;
     private int Printed;
     private boolean PrintActive;

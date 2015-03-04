@@ -4,7 +4,6 @@
  */
 
 class DisplayValue {
-
     private final String value;
 
     public DisplayValue(String value) {
@@ -17,7 +16,6 @@ class DisplayValue {
 }
 
 class Const {
-
     public static final byte B_HEADER = 0x16;
     public static final byte B_FINISH = 0x0D;
 
