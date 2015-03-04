@@ -12,7 +12,6 @@ import javax.swing.*;
 import javax.swing.Timer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.text.DefaultCaret;
-
 import org.ini4j.Ini;
 
 class Form extends JFrame implements WindowListener, Observer {
