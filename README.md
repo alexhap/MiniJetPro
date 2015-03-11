@@ -7,4 +7,4 @@ Tasks may be entered manually or written in text-file with csv-format (PrintCoun
 
 Used libraries:
   1) Java serial port communication library - https://code.google.com/p/java-simple-serial-connector/
-  2) Java .ini library - http://ini4j.sourceforge.net/
+  2) Java .ini library (windows format) - http://ini4j.sourceforge.net/
