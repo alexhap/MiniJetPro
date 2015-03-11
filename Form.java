@@ -1,10 +1,13 @@
 /**
- * Created by alex on 18.02.2015.
+ * Created by alexhap on 18.02.2015.
  *
  */
 
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.Dimension;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -93,19 +96,21 @@ class Form extends JFrame implements WindowListener, Observer {
                 super.mouseClicked(e);
             }
         });
+
         tTasks.setFont(tTasks.getFont().deriveFont(NORMAL, 12));
         textLog.setFont(textLog.getFont().deriveFont(NORMAL, 12));
         ((DefaultCaret) textLog.getCaret()).setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
-        setTitle("MiniJetPro");
-        setMinimumSize(new Dimension(720, 400));
+
         RowSendComplete = true;
         TableSendComplete = true;
         CurrentRow = 0;
+        setMinimumSize(new Dimension(720, 400));
+        setTitle("MiniJetPro printer control");
     }
 
     private void onFolderChooseAction() {
         JFileChooser fc = new JFileChooser();
-        fc.setDialogTitle("Выберите папку для наблюдения");
+        fc.setDialogTitle("Выберите папку для мониторинга заданий");
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         if (!tFolderToMonitor.getText().equals("")) {
             File tmpFile = new File(tFolderToMonitor.getText());
@@ -137,14 +142,11 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onStopAction() {
-        TableSendComplete = true;
-        RowSendComplete = true;
         timerMonitor.stop();
         timerSend.stop();
+        RowSendComplete = true;
+        TableSendComplete = true;
         SendCommand(Const.strSend(Const.B_STOP_PRINT), 0, "");
-        for (int i = 0; i < 10; i++) {
-            textLog.append(String.format("it is string # %d\n", i));
-        }
     }
 
     private void onClearLogAction() {
