@@ -13,7 +13,7 @@
     </clientProperties>
     <border type="none"/>
     <children>
-      <grid id="b2832" binding="panel3" layout-manager="GridLayoutManager" row-count="1" column-count="7" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+      <grid id="b2832" binding="panel3" layout-manager="GridLayoutManager" row-count="1" column-count="9" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
         <margin top="2" left="3" bottom="3" right="3"/>
         <constraints>
           <grid row="2" column="0" row-span="1" col-span="1" vsize-policy="1" hsize-policy="3" anchor="2" fill="1" indent="0" use-parent-layout="false">
@@ -71,15 +71,32 @@
               <grid row="0" column="4" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
             </constraints>
             <properties>
-              <text value="Осталось:"/>
+              <text value="На заготовке:"/>
             </properties>
           </component>
           <component id="8e124" class="javax.swing.JCheckBox" binding="cbDebugLog">
             <constraints>
-              <grid row="0" column="6" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="4" fill="0" indent="0" use-parent-layout="false"/>
+              <grid row="0" column="8" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="4" fill="0" indent="0" use-parent-layout="false"/>
             </constraints>
             <properties>
               <text value="Детальный лог"/>
+              <toolTipText value="Включение в журнал событий разбора фрагментированных пакетов"/>
+            </properties>
+          </component>
+          <component id="258ea" class="javax.swing.JLabel">
+            <constraints>
+              <grid row="0" column="6" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <text value="Осталось:"/>
+            </properties>
+          </component>
+          <component id="718bc" class="javax.swing.JLabel" binding="lStatus4">
+            <constraints>
+              <grid row="0" column="7" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <text value="-"/>
             </properties>
           </component>
         </children>
@@ -129,6 +146,7 @@
                     <item value="COM9"/>
                     <item value="COM10"/>
                   </model>
+                  <toolTipText value="Порт подключения к Minijet Pro"/>
                 </properties>
               </component>
               <component id="42406" class="javax.swing.JLabel">
@@ -162,11 +180,12 @@
                 </constraints>
                 <properties>
                   <text value="Наблюдение"/>
+                  <toolTipText value="Включение режима наблюдения за папкой и автоматической отправки заданий "/>
                 </properties>
               </component>
             </children>
           </grid>
-          <grid id="967a3" binding="panel12" layout-manager="GridLayoutManager" row-count="1" column-count="4" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+          <grid id="967a3" binding="panel12" layout-manager="GridLayoutManager" row-count="1" column-count="5" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
             <margin top="0" left="0" bottom="0" right="0"/>
             <constraints>
               <grid row="1" column="0" row-span="1" col-span="1" vsize-policy="1" hsize-policy="3" anchor="1" fill="1" indent="0" use-parent-layout="false"/>
@@ -189,23 +208,38 @@
                     <preferred-size width="150" height="-1"/>
                   </grid>
                 </constraints>
-                <properties/>
+                <properties>
+                  <toolTipText value="Команда для отправки принтеру в ручном режиме"/>
+                </properties>
               </component>
               <component id="70fbc" class="javax.swing.JButton" binding="bSendTest">
                 <constraints>
-                  <grid row="0" column="3" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="0" fill="1" indent="0" use-parent-layout="false"/>
+                  <grid row="0" column="4" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="0" fill="1" indent="0" use-parent-layout="false"/>
                 </constraints>
                 <properties>
                   <text value="Отправить"/>
+                  <toolTipText value="Выполнить тестовую команду (ручной режим)"/>
                 </properties>
               </component>
-              <component id="7f777" class="javax.swing.JSpinner" binding="spinCount">
+              <component id="7f777" class="javax.swing.JSpinner" binding="spObjectCount">
                 <constraints>
                   <grid row="0" column="2" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="1" indent="0" use-parent-layout="false">
                     <minimum-size width="50" height="-1"/>
                   </grid>
                 </constraints>
-                <properties/>
+                <properties>
+                  <toolTipText value="Количество заготовок"/>
+                </properties>
+              </component>
+              <component id="74cf3" class="javax.swing.JSpinner" binding="spLabelsPerObject">
+                <constraints>
+                  <grid row="0" column="3" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="1" indent="0" use-parent-layout="false">
+                    <minimum-size width="50" height="-1"/>
+                  </grid>
+                </constraints>
+                <properties>
+                  <toolTipText value="Количество меток на заготовку"/>
+                </properties>
               </component>
             </children>
           </grid>
@@ -223,6 +257,7 @@
                 </constraints>
                 <properties>
                   <text value="Загрузить задания"/>
+                  <toolTipText value="Загрузка заданий из файла"/>
                 </properties>
               </component>
               <component id="dba37" class="javax.swing.JButton" binding="bSendActiveString">
@@ -231,6 +266,7 @@
                 </constraints>
                 <properties>
                   <text value="Печатать выделенную"/>
+                  <toolTipText value="Отправить принтеру выделенную в очереди заданий команду"/>
                 </properties>
               </component>
               <component id="105f5" class="javax.swing.JButton" binding="bSendAll">
@@ -239,6 +275,7 @@
                 </constraints>
                 <properties>
                   <text value="Печатать все"/>
+                  <toolTipText value="Отправить принтеру все задания из очереди начиная с первой"/>
                 </properties>
               </component>
               <component id="57f8" class="javax.swing.JButton" binding="bStop">
@@ -247,6 +284,7 @@
                 </constraints>
                 <properties>
                   <text value="СТОП"/>
+                  <toolTipText value="Оправка принтеру команды 'Остановка печати'"/>
                 </properties>
               </component>
               <component id="88652" class="javax.swing.JButton" binding="bClearLog">
@@ -255,6 +293,7 @@
                 </constraints>
                 <properties>
                   <text value="Очистить лог"/>
+                  <toolTipText value="Очистка журнала. При установленном флаге 'в файл' выполнится сохранение"/>
                 </properties>
               </component>
               <component id="f379b" class="javax.swing.JCheckBox" binding="cbSaveLogToFile">
@@ -263,6 +302,7 @@
                 </constraints>
                 <properties>
                   <text value="в файл"/>
+                  <toolTipText value="Управление автоматическим сохранением журнала в файл"/>
                 </properties>
               </component>
             </children>
@@ -286,7 +326,9 @@
             <constraints>
               <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="7" hsize-policy="7" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
             </constraints>
-            <properties/>
+            <properties>
+              <toolTipText value="Очередь заданий для принтера"/>
+            </properties>
             <border type="none"/>
             <children>
               <component id="96a40" class="javax.swing.JTable" binding="tTasks">
@@ -306,7 +348,9 @@
             <children>
               <component id="4ddc6" class="javax.swing.JTextArea" binding="textLog">
                 <constraints/>
-                <properties/>
+                <properties>
+                  <toolTipText value="Журнал операций"/>
+                </properties>
               </component>
             </children>
           </scrollpane>

@@ -13,8 +13,10 @@ class ComCore extends Observable implements Observer{
     private static SerialPort serialPort;
     private boolean StopFlag; // MiniJetPro duplicates last returned "print-end flag" in answer on STOP_PRINT command.
     private byte[] fragment; // array for manipulating with fragmented packets
-    private int toPrint;
-    private int Printed;
+    private int toPrintObjects;
+    private int PrintedObjects;
+    private int toPrintLabels;
+    private int PrintedLabels;
     private boolean PrintActive;
     private boolean DebugLog;
 
@@ -30,7 +32,7 @@ class ComCore extends Observable implements Observer{
             PortReader portReader = new PortReader(serialPort);
             serialPort.addEventListener(portReader, SerialPort.MASK_RXCHAR);
             portReader.addObserver(this);
-            this.SendData(Const.strSend(Const.B_READ_STATUS), 0, "");
+            this.SendData(Const.strSend(Const.B_READ_STATUS), 0, 0, "");
         } catch (SerialPortException ex) {
             this.toLog("Не удалось подключиться по порту ".concat(Port));
         }
@@ -40,13 +42,17 @@ class ComCore extends Observable implements Observer{
         return PrintActive;
     }
 
-    public int getPrinted() {
-        return Printed;
+    public int getPrintedObjects() {
+        return PrintedObjects;
+    }
+
+    public int getPrintedLabels() {
+        return PrintedLabels;
     }
 
     public int getLeftToPrint() {
-        if (toPrint - Printed > 0) {
-            return toPrint - Printed;
+        if (toPrintObjects - PrintedObjects > 0) {
+            return toPrintObjects - PrintedObjects;
         } else {
             return 0;
         }
@@ -56,13 +62,15 @@ class ComCore extends Observable implements Observer{
         return serialPort.isOpened();
     }
 
-    public void SendData(String str, int count, String art) {
+    public void SendData(String str, int objCount, int labelCount, String art) {
         try {
             serialPort.writeBytes(StrToHex(str));
-            if (count > 0) {
-                toPrint = count;
-                Printed = 0;
-                toLog(String.format("=> %d x %s", count, art));
+            if (objCount > 0) {
+                toPrintObjects = objCount;
+                PrintedObjects = 0;
+                toPrintLabels = labelCount;
+                PrintedLabels = 0;
+                toLog(String.format("=> %d x %d: %s", objCount, labelCount, art));
             } else {
                 toLog(String.format("=> %s", str));
             }
@@ -127,13 +135,17 @@ class ComCore extends Observable implements Observer{
                         if (buffer[4] != Const.BR_OK || buffer[3] != Const.BR_PE) {
                             strText = strText.concat(strFail);
                         } else {
-                            Printed++;
-                            if (toPrint - Printed < 1) {
+                            PrintedLabels++;
+                            if (PrintedLabels >= toPrintLabels) {
+                                PrintedLabels = 0;
+                                PrintedObjects++;
+                            }
+                            if (PrintedObjects >= toPrintObjects) {
                                 if (DebugLog) {
-                                    strOk = strOk.concat(String.format("\n!! Печать выполнена %d раз. Остановка печати.", Printed));
+                                    strOk = strOk.concat(String.format("\n!! Печать выполнена %d раз. Остановка печати.", PrintedObjects));
                                 } else {
                                     strText = "";
-                                    strOk = String.format("!! Печать выполнена %d раз. Остановка печати.", Printed);
+                                    strOk = String.format("!! Печать выполнена %d раз. Остановка печати.", PrintedObjects);
                                 }
                                 commandAtEnd = Const.B_STOP_PRINT;
                                 StopFlag = true;
@@ -198,7 +210,7 @@ class ComCore extends Observable implements Observer{
                     toLog(strDebug.concat(strText).concat(strOk));
                 }
                 if (commandAtEnd != 0x00) {
-                    SendData(Const.strSend(commandAtEnd), 0, "");
+                    SendData(Const.strSend(commandAtEnd), 0, 0, "");
                 }
             } else {
                 toLog(String.format("<= %s: пакет данных не распознан.", HexToStr(buffer)));

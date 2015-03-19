@@ -42,8 +42,10 @@ class Form extends JFrame implements WindowListener, Observer {
     private JPanel panel12;
     private JPanel panel13;
     private JTextArea textLog;
-    private JSpinner spinCount;
+    private JSpinner spObjectCount;
     private JCheckBox cbDebugLog;
+    private JSpinner spLabelsPerObject;
+    private JLabel lStatus4;
     private final Timer timerMonitor;
     private final Timer timerSend;
     private final Timer timerStatus;
@@ -78,7 +80,8 @@ class Form extends JFrame implements WindowListener, Observer {
         bSendAll.addActionListener(e -> onSendAllAction());
         bStop.addActionListener(e -> onStopAction());
         bClearLog.addActionListener(e -> onClearLogAction());
-        spinCount.addChangeListener(e -> onSpinChange());
+        spObjectCount.addChangeListener(e -> onObjectCountChange());
+        spLabelsPerObject.addChangeListener(e -> onLabelsPerObjectChange());
         cbPrinterPort.addActionListener(e -> onPrinterPortChange());
         cbActive.addActionListener(e -> onCheckActiveAction());
         timerSend = new Timer(100, e -> timerSendAction());
@@ -91,7 +94,7 @@ class Form extends JFrame implements WindowListener, Observer {
                 if (e.getClickCount() == 2) {
                     int row = ((JTable) e.getSource()).rowAtPoint(e.getPoint());
                     tCommand.setText((String) tTasks.getModel().getValueAt(row, 2));
-                    spinCount.setValue(Integer.valueOf((String) tTasks.getModel().getValueAt(row, 1)));
+                    spObjectCount.setValue(Integer.valueOf((String) tTasks.getModel().getValueAt(row, 1)));
                 }
                 super.mouseClicked(e);
             }
@@ -124,7 +127,7 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onSendTestAction() {
-        SendCommand(tCommand.getText(), (int) spinCount.getValue(), "Тестовая строка");
+        SendCommand(tCommand.getText(), (int) spObjectCount.getValue(), (int) spLabelsPerObject.getValue(), "Тестовая строка");
     }
 
     private void onLoadTaskAction() {
@@ -146,7 +149,7 @@ class Form extends JFrame implements WindowListener, Observer {
         timerSend.stop();
         RowSendComplete = true;
         TableSendComplete = true;
-        SendCommand(Const.strSend(Const.B_STOP_PRINT), 0, "");
+        SendCommand(Const.strSend(Const.B_STOP_PRINT), 0, 0, "");
     }
 
     private void onClearLogAction() {
@@ -154,9 +157,15 @@ class Form extends JFrame implements WindowListener, Observer {
         textLog.setText("");
     }
 
-    private void onSpinChange() {
-        if ((int) spinCount.getValue() < 0) {
-            spinCount.setValue(0);
+    private void onObjectCountChange() {
+        if ((int) spObjectCount.getValue() < 1) {
+            spObjectCount.setValue(1);
+        }
+    }
+
+    private void onLabelsPerObjectChange() {
+        if ((int) spLabelsPerObject.getValue() < 1) {
+            spLabelsPerObject.setValue(1);
         }
     }
 
@@ -220,25 +229,28 @@ class Form extends JFrame implements WindowListener, Observer {
             } else {
                 lStatus1.setText("Остановлен");
             }
-            lStatus2.setText(Integer.toString(cc.getPrinted()));
-            lStatus3.setText(Integer.toString(cc.getLeftToPrint()));
+            lStatus2.setText(Integer.toString(cc.getPrintedObjects()));
+            lStatus3.setText(Integer.toString(cc.getPrintedLabels()));
+            lStatus4.setText(Integer.toString(cc.getLeftToPrint()));
         } else {
             lStatus1.setText("Недоступен");
             lStatus2.setText("-");
             lStatus3.setText("-");
+            lStatus4.setText("-");
         }
     }
 
-    private void SendCommand(String str, int count, String art) {
+    private void SendCommand(String str, int objCount, int labelCount, String art) {
         RowSendComplete = false;
         cc.setDebugLog(cbDebugLog.getModel().isSelected());
-        cc.SendData(str, count, art);
+        cc.SendData(str, objCount, labelCount, art);
     }
 
     private void SendTableRow(int row) {
-        SendCommand((String) tTasks.getModel().getValueAt(row, 2),
-                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 1)),
-                (String) tTasks.getModel().getValueAt(row, 0));
+        SendCommand((String) tTasks.getModel().getValueAt(row, 3),      // command
+                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 1)), // objects to print
+                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 2)), // labels per object
+                (String) tTasks.getModel().getValueAt(row, 0));     // human friendly label name
         if (row < tTasks.getRowCount() - 1) {
             tTasks.setRowSelectionInterval(row + 1, row + 1);
         } else {
@@ -273,8 +285,9 @@ class Form extends JFrame implements WindowListener, Observer {
             }
             tm.setColumnCount(0);
             tm.addColumn("Артикул");
-            tm.addColumn("Кол-во");
-            tm.addColumn("Команда");
+            tm.addColumn("Кол-во заготовок");
+            tm.addColumn("Кол-во меток");
+            tm.addColumn("Команда для принтера");
             try {
                 BufferedReader br = new BufferedReader(new FileReader(fLoad));
                 String str;
@@ -283,11 +296,12 @@ class Form extends JFrame implements WindowListener, Observer {
                 while ((str = br.readLine()) != null) {
                     index++;
                     arrStr = str.split(";");
-                    if (arrStr.length == 3) {
+                    if (arrStr.length == 4) {
                         Vector<String> row = new Vector<>();
-                        row.add(arrStr[1].trim());
-                        row.add(arrStr[0].trim());
-                        row.add(arrStr[2].trim().toUpperCase());
+                        row.add(arrStr[2].trim()); // user friendly label name
+                        row.add(arrStr[0].trim()); // objects count
+                        row.add(arrStr[1].trim()); // labels per object count
+                        row.add(arrStr[3].trim().toUpperCase()); // printer command
                         tm.addRow(row);
                     } else {
                         textLog.append(String.format("Ошибка данных в строке №%d: %s\n", index, str));
@@ -299,8 +313,11 @@ class Form extends JFrame implements WindowListener, Observer {
                 tTasks.getColumnModel().getColumn(1).setWidth(60);
                 tTasks.getColumnModel().getColumn(1).setMinWidth(60);
                 tTasks.getColumnModel().getColumn(1).setMaxWidth(100);
-                tTasks.getColumnModel().getColumn(2).setWidth(200);
-                tTasks.getColumnModel().getColumn(2).setMinWidth(200);
+                tTasks.getColumnModel().getColumn(2).setWidth(60);
+                tTasks.getColumnModel().getColumn(2).setMinWidth(60);
+                tTasks.getColumnModel().getColumn(2).setMaxWidth(100);
+                tTasks.getColumnModel().getColumn(3).setWidth(200);
+                tTasks.getColumnModel().getColumn(3).setMinWidth(200);
                 tTasks.setDefaultEditor(tTasks.getColumnClass(0), null);
                 tTasks.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
                 if (tTasks.getRowCount() > 0) {
@@ -338,7 +355,7 @@ class Form extends JFrame implements WindowListener, Observer {
         bFolderChoose.setEnabled(mode);
         cbActive.setEnabled(mode);
         tCommand.setEnabled(mode);
-        spinCount.setEnabled(mode);
+        spObjectCount.setEnabled(mode);
         bLoadTasks.setEnabled(mode);
         bSendActiveString.setEnabled(mode);
         bSendAll.setEnabled(mode);
@@ -355,7 +372,8 @@ class Form extends JFrame implements WindowListener, Observer {
             prefs.put("MiniJetPro", "FolderToMonitor", "");
             prefs.put("MiniJetPro", "ActiveMonitoring", false);
             prefs.put("MiniJetPro", "Command", "162A010250530D");
-            prefs.put("MiniJetPro", "Count", 0);
+            prefs.put("MiniJetPro", "ObjectCount", 0);
+            prefs.put("MiniJetPro", "LabelsPerObject", 0);
             prefs.put("MiniJetPro", "SaveLog", false);
             prefs.put("MiniJetPro", "WinXPos", 1);
             prefs.put("MiniJetPro", "WinYPos", 1);
@@ -381,8 +399,11 @@ class Form extends JFrame implements WindowListener, Observer {
         if (prefs.get("MiniJetPro", "Command", String.class) != null) {
             tCommand.setText(prefs.get("MiniJetPro", "Command", String.class));
         }
-        if (prefs.get("MiniJetPro", "Count", Integer.class) != null) {
-            spinCount.setValue(prefs.get("MiniJetPro", "Count", Integer.class));
+        if (prefs.get("MiniJetPro", "ObjectCount", Integer.class) != null) {
+            spObjectCount.setValue(prefs.get("MiniJetPro", "ObjectCount", Integer.class));
+        }
+        if (prefs.get("MiniJetPro", "LabelsPerObject", Integer.class) != null) {
+            spLabelsPerObject.setValue(prefs.get("MiniJetPro", "LabelsPerObject", Integer.class));
         }
         if (prefs.get("MiniJetPro", "SaveLog", Boolean.class) != null) {
             cbSaveLogToFile.setSelected(prefs.get("MiniJetPro", "SaveLog", Boolean.class));
@@ -408,7 +429,8 @@ class Form extends JFrame implements WindowListener, Observer {
                 prefs.put("MiniJetPro", "FolderToMonitor", tFolderToMonitor.getText());
                 prefs.put("MiniJetPro", "ActiveMonitoring", cbActive.getModel().isSelected());
                 prefs.put("MiniJetPro", "Command", tCommand.getText());
-                prefs.put("MiniJetPro", "Count", spinCount.getValue());
+                prefs.put("MiniJetPro", "ObjectCount", spObjectCount.getValue());
+                prefs.put("MiniJetPro", "LabelsPerObject", spLabelsPerObject.getValue());
                 prefs.put("MiniJetPro", "SaveLog", cbSaveLogToFile.getModel().isSelected());
                 prefs.put("MiniJetPro", "WinXPos", this.getLocationOnScreen().x);
                 prefs.put("MiniJetPro", "WinYPos", this.getLocationOnScreen().y);

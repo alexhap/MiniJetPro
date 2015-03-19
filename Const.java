@@ -38,7 +38,7 @@ class Const {
 
     private static final DisplayValue S_HEADER_SEND = new DisplayValue("162A010250");
 //    public static final DisplayValue S_HEADER_RECEIVE = new DisplayValue("163B");
-    private static final DisplayValue S_FINISH = new DisplayValue("0D");
+    private static final DisplayValue S_ENDING = new DisplayValue("0D");
 
     private static String toString(byte b) {
         String res = Integer.toHexString(b);
@@ -50,6 +50,6 @@ class Const {
     }
 
     public static String strSend(byte b) {
-        return S_HEADER_SEND.toString().concat(toString(b).concat(S_FINISH.toString()));
+        return S_HEADER_SEND.toString().concat(Const.toString(b).concat(S_ENDING.toString()));
     }
 }
