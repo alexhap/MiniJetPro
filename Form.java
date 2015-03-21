@@ -3,11 +3,11 @@
  *
  */
 
-import java.awt.Dimension;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.awt.Dimension;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -54,21 +54,39 @@ class Form extends JFrame implements WindowListener, Observer {
     private int CurrentRow;
     private static ComCore cc = null;
 
-    @Override public void windowOpened(WindowEvent e) {
+    @Override
+    public void windowOpened(WindowEvent e) {
         LoadSettings();
     }
-    @Override public void windowClosing(WindowEvent e) {
+
+    @Override
+    public void windowClosing(WindowEvent e) {
         SaveSettings();
         SaveLogToFile();
         if (cc != null && cc.isPortOpened()) {
             cc.ClosePort();
         }
     }
-    @Override public void windowClosed(WindowEvent e) { }
-    @Override public void windowIconified(WindowEvent e) { }
-    @Override public void windowDeiconified(WindowEvent e) { }
-    @Override public void windowActivated(WindowEvent e) { }
-    @Override public void windowDeactivated(WindowEvent e) { }
+
+    @Override
+    public void windowClosed(WindowEvent e) {
+    }
+
+    @Override
+    public void windowIconified(WindowEvent e) {
+    }
+
+    @Override
+    public void windowDeiconified(WindowEvent e) {
+    }
+
+    @Override
+    public void windowActivated(WindowEvent e) {
+    }
+
+    @Override
+    public void windowDeactivated(WindowEvent e) {
+    }
 
     private Form() {
         this.addWindowListener(this);
@@ -468,4 +486,5 @@ class Form extends JFrame implements WindowListener, Observer {
         frame.pack();
         frame.setVisible(true);
     }
+
 }
