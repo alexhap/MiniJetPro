@@ -25,6 +25,7 @@ class Const {
     public static final byte BIT_PRINT = 0x01;
     public static final byte BIT_PHOTO = 0x02;
 
+    public static final byte B_EMPTY = 0x00; // NULL
     public static final byte B_COUNTER = 0x43; // 'C'
     public static final byte B_DELAY = 0x44; // 'D'
     public static final byte B_PRINT_END = 0x45; // 'E'
@@ -51,5 +52,20 @@ class Const {
 
     public static String strSend(byte b) {
         return S_HEADER_SEND.toString().concat(Const.toString(b).concat(S_ENDING.toString()));
+    }
+
+    public static String strSend(byte b, int value, int codeLen) {
+        String res = S_HEADER_SEND.toString().concat(Const.toString(b));
+        while (codeLen-- > 0) {
+            int currDigit = (int) Math.round(Math.pow(10, codeLen));
+            if (value >= currDigit) {
+                int num = value / currDigit;
+                value = value - num * currDigit;
+                res = res.concat("0").concat(Integer.toString(num));
+            } else {
+                res = res.concat("00");
+            }
+        }
+        return res.concat(S_ENDING.toString());
     }
 }

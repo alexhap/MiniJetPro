@@ -12,7 +12,8 @@ import jssc.SerialPortException;
 class ComCore extends Observable implements Observer{
     private static SerialPort serialPort;
     private boolean StopFlag; // MiniJetPro duplicates last returned "print-end flag" in answer on STOP_PRINT command.
-    private byte[] fragment; // array for manipulating with fragmented packets
+    private byte[] fragment;  // array for manipulating with fragmented packets
+    private String commandBuffer; // command to execute after layout selection
     private int toPrintObjects;
     private int PrintedObjects;
     private int toPrintLabels;
@@ -25,6 +26,7 @@ class ComCore extends Observable implements Observer{
         StopFlag = false;
         PrintActive = false;
         DebugLog = false;
+        commandBuffer = "";
         try {
             serialPort.openPort();
             serialPort.setParams(SerialPort.BAUDRATE_38400, SerialPort.DATABITS_8, SerialPort.STOPBITS_1, SerialPort.PARITY_NONE);
@@ -32,7 +34,7 @@ class ComCore extends Observable implements Observer{
             PortReader portReader = new PortReader(serialPort);
             serialPort.addEventListener(portReader, SerialPort.MASK_RXCHAR);
             portReader.addObserver(this);
-            this.SendData(Const.strSend(Const.B_READ_STATUS), 0, 0, "");
+            this.SendData(0, "", 0, 0, Const.strSend(Const.B_READ_STATUS));
         } catch (SerialPortException ex) {
             this.toLog("Не удалось подключиться по порту ".concat(Port));
         }
@@ -62,20 +64,33 @@ class ComCore extends Observable implements Observer{
         return serialPort.isOpened();
     }
 
-    public void SendData(String str, int objCount, int labelCount, String art) {
+    public void SendData(int layout, String artikul, int objCount, int labelCount, String command) {
         try {
-            serialPort.writeBytes(StrToHex(str));
             if (objCount > 0) {
                 toPrintObjects = objCount;
                 PrintedObjects = 0;
                 toPrintLabels = labelCount;
                 PrintedLabels = 0;
-                toLog(String.format("=> %d x %d: %s", objCount, labelCount, art));
+                if (layout == -1) {
+                    serialPort.writeBytes(StrToHex(commandBuffer));
+                    commandBuffer = "";
+                } else {
+                    commandBuffer = command;
+                    String strLayout;
+                    if (layout < 100) {
+                        strLayout = Const.strSend(Const.B_SELECT_MESSAGE_2, layout, 2);
+                    } else {
+                        strLayout = Const.strSend(Const.B_SELECT_MESSAGE_3, layout, 3);
+                    }
+                    serialPort.writeBytes(StrToHex(strLayout));
+                    toLog(String.format("=> L=%d, %d*%d %s", layout, objCount, labelCount, artikul));
+                }
             } else {
-                toLog(String.format("=> %s", str));
+                serialPort.writeBytes(StrToHex(command));
+                toLog(String.format("=> %s", command));
             }
         } catch (SerialPortException ex) {
-            toLog(String.format("!! Ошибка COM порта при отправке команды %s", str));
+            toLog(String.format("!! Ошибка COM порта при отправке команды %s", command));
             PrintActive = false;
         }
     }
@@ -118,7 +133,7 @@ class ComCore extends Observable implements Observer{
                 String strText;
                 String strOk = "выполнено.";
                 String strFail = "не ";
-                byte commandAtEnd = 0x00;
+                byte commandAtEnd = Const.B_EMPTY;
                 if (buffer[2] == Const.B_COUNTER) {
                     strText = "Установка счетчика: ";
                     if (buffer[4] != Const.BR_OK) {
@@ -158,6 +173,8 @@ class ComCore extends Observable implements Observer{
                     strText = "Выбор макета для печати: ";
                     if (buffer[4] != Const.BR_OK) {
                         strText = strText.concat(strFail);
+                    } else {
+                        commandAtEnd = Const.B_SET_VARIABLE_1;
                     }
                 } else if (buffer[2] == Const.B_START_PRINT) {
                     strText = "Включение режима печати: ";
@@ -209,8 +226,10 @@ class ComCore extends Observable implements Observer{
                 if (DebugLog || buffer[2] != Const.B_PRINT_END || commandAtEnd == Const.B_STOP_PRINT) {
                     toLog(strDebug.concat(strText).concat(strOk));
                 }
-                if (commandAtEnd != 0x00) {
-                    SendData(Const.strSend(commandAtEnd), 0, 0, "");
+                if (commandAtEnd == Const.B_SET_VARIABLE_1) {
+                    SendData(-1, "", toPrintObjects, toPrintLabels, "");
+                } else if (commandAtEnd != Const.B_EMPTY) {
+                    SendData(0, "", 0, 0, Const.strSend(commandAtEnd));
                 }
             } else {
                 toLog(String.format("<= %s: пакет данных не распознан.", HexToStr(buffer)));
