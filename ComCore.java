@@ -91,7 +91,7 @@ class ComCore extends Observable implements Observer{
                 toLog(String.format("=> %s", command));
             }
         } catch (SerialPortException ex) {
-            toLog(String.format("!! Ошибка COM порта при отправке команды %s", command));
+            toLog(String.format("!! Ошибка COM порта при отправке команды (%s)", command));
             PrintActive = false;
         }
     }
