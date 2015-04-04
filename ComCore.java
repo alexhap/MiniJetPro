@@ -72,18 +72,19 @@ class ComCore extends Observable implements Observer{
                 toPrintLabels = labelCount;
                 PrintedLabels = 0;
                 if (layout == -1) {
-                    serialPort.writeBytes(StrToHex(commandBuffer));
+                    if (DebugLog) toLog(String.format("=> Отправка команды после выбора макета: (%s)", command));
+                    serialPort.writeBytes(StrToHex(command));
                     commandBuffer = "";
                 } else {
                     commandBuffer = command;
-                    String strLayout;
+                    String strSend;
                     if (layout < 100) {
-                        strLayout = Const.strSend(Const.B_SELECT_MESSAGE_2, layout, 2);
+                        strSend = Const.strSend(Const.B_SELECT_MESSAGE_2, layout, 2);
                     } else {
-                        strLayout = Const.strSend(Const.B_SELECT_MESSAGE_3, layout, 3);
+                        strSend = Const.strSend(Const.B_SELECT_MESSAGE_3, layout, 3);
                     }
-                    serialPort.writeBytes(StrToHex(strLayout));
-                    toLog(String.format("=> L=%d, %d*%d %s", layout, objCount, labelCount, artikul));
+                    serialPort.writeBytes(StrToHex(strSend));
+                    toLog(String.format("=> L=%d, %d*%d %s (%s)", layout, objCount, labelCount, artikul, strSend));
                 }
             } else {
                 serialPort.writeBytes(StrToHex(command));
@@ -115,7 +116,7 @@ class ComCore extends Observable implements Observer{
                 toLog(String.format("!! Ошибка передачи данных. Сброс испорченного пакета: %s", HexToStr(buffer)));
             }
         } else { // good packet
-            if (DebugLog) toLog(String.format("** good/overflow packet: %s. (buffer[0] == Const.B_HEADER)", HexToStr(buffer)));
+            if (DebugLog) toLog(String.format("** good packet: %s. (buffer[0] == Const.B_HEADER)", HexToStr(buffer)));
             if (buffer.length > 6) { // overflow
                 if (DebugLog) toLog(String.format("** good overflowed packet #1: %s. (buffer.length > 6)", HexToStr(Arrays.copyOf(buffer, 6))));
                 ReceiveData(Arrays.copyOf(buffer, 6));
@@ -124,7 +125,7 @@ class ComCore extends Observable implements Observer{
             } else if (buffer.length < 6) { // fragmentation
                 if (DebugLog) toLog(String.format("** good fragmented packet stored: %s. (buffer.length < 6)", HexToStr(buffer)));
                 if (fragment.length > 0) {
-                    toLog(String.format("!! Ошибка передачи данных. Сброс испорченного пакета: %s", HexToStr(fragment)));
+                    toLog(String.format("!! Ошибка передачи данных. Старый фрагментированный пакет считается испорченным, сброс: %s", HexToStr(fragment)));
                 }
                 fragment = buffer.clone();
             } else if (buffer.length == 6 && buffer[5] == Const.B_FINISH) { // full one packet
@@ -227,7 +228,12 @@ class ComCore extends Observable implements Observer{
                     toLog(strDebug.concat(strText).concat(strOk));
                 }
                 if (commandAtEnd == Const.B_SET_VARIABLE_1) {
-                    SendData(-1, "", toPrintObjects, toPrintLabels, "");
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    SendData(-1, "", toPrintObjects, toPrintLabels, commandBuffer);
                 } else if (commandAtEnd != Const.B_EMPTY) {
                     SendData(0, "", 0, 0, Const.strSend(commandAtEnd));
                 }
