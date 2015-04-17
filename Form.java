@@ -3,20 +3,17 @@
  *
  */
 
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
-import java.awt.Dimension;
+import java.awt.*;
+import java.awt.event.*;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import javax.swing.*;
 import javax.swing.Timer;
-import javax.swing.table.DefaultTableModel;
-import javax.swing.table.TableColumnModel;
+import javax.swing.table.*;
 import javax.swing.text.DefaultCaret;
 import org.ini4j.Ini;
+import sun.swing.table.DefaultTableCellHeaderRenderer;
 
 class Form extends JFrame implements WindowListener, Observer {
     private JPanel panelMain;
@@ -41,6 +38,7 @@ class Form extends JFrame implements WindowListener, Observer {
     private JButton bSendAll;
     private JButton bStop;
     private JButton bClearLog;
+    private JButton bPause;
     private JCheckBox cbSaveLogToFile;
     private JCheckBox cbDebugLog;
     private JTable tTasks;
@@ -51,11 +49,15 @@ class Form extends JFrame implements WindowListener, Observer {
     private final Timer timerMonitor;
     private final Timer timerSend;
     private final Timer timerStatus;
+    private final Timer timerAutoDisconnect;
+    private JPopupMenu menu;
 
     private boolean RowSendComplete;
     private boolean TableSendComplete;
     private int CurrentRow;
     private static ComCore cc = null;
+    private int layerSelectDelay;
+    private boolean paused;
 
     @Override
     public void windowOpened(WindowEvent e) {
@@ -64,11 +66,11 @@ class Form extends JFrame implements WindowListener, Observer {
 
     @Override
     public void windowClosing(WindowEvent e) {
+        disconnect();
+        if (cc != null) cc.deleteObservers();
+        cc = null;
         SaveSettings();
         SaveLogToFile();
-        if (cc != null && cc.isPortOpened()) {
-            cc.ClosePort();
-        }
     }
 
     @Override
@@ -91,7 +93,7 @@ class Form extends JFrame implements WindowListener, Observer {
     public void windowDeactivated(WindowEvent e) {
     }
 
-    private Form() {
+    public Form() {
         this.addWindowListener(this);
 
         bFolderChoose.addActionListener(e -> onFolderChooseAction());
@@ -101,6 +103,7 @@ class Form extends JFrame implements WindowListener, Observer {
         bSendAll.addActionListener(e -> onSendAllAction());
         bStop.addActionListener(e -> onStopAction());
         bClearLog.addActionListener(e -> onClearLogAction());
+        bPause.addActionListener(e -> onPauseAction());
         spObjectCount.addChangeListener(e -> onObjectCountChange());
         spLabelsPerObject.addChangeListener(e -> onLabelsPerObjectChange());
         spLayout.addChangeListener(e -> onLayoutChange());
@@ -109,9 +112,46 @@ class Form extends JFrame implements WindowListener, Observer {
         timerSend = new Timer(100, e -> timerSendAction());
         timerMonitor = new Timer(500, e -> timerMonitorAction());
         timerStatus = new Timer(333, e -> timerStatusAction());
+        timerAutoDisconnect = new Timer(2000, e -> timerDisconnectAction());
+
+        menu = new JPopupMenu();
+        JMenuItem menuItem = new JMenuItem("Сдвинуть вверх"); //UIManager.getIcon("Table.ascendingSortIcon")
+        menuItem.addActionListener(e -> {
+            int row = tTasks.getSelectedRow();
+            if (row > 0) {
+                DefaultTableModel tm = (DefaultTableModel) tTasks.getModel();
+                tm.getDataVector().add(row - 1, tm.getDataVector().get(row));
+                tm.getDataVector().remove(row + 1);
+                tm.fireTableDataChanged();
+                tTasks.setRowSelectionInterval(row - 1, row - 1);
+            }
+        });
+        menu.add(menuItem);
+        menuItem = new JMenuItem("Сдвинуть вниз"); // UIManager.getIcon("Table.descendingSortIcon")
+        menuItem.addActionListener(e -> {
+            int row = tTasks.getSelectedRow();
+            if (row > -1 && row < tTasks.getRowCount() - 1) {
+                DefaultTableModel tm = (DefaultTableModel) tTasks.getModel();
+                tm.getDataVector().add(row, tm.getDataVector().get(row + 1));
+                tm.getDataVector().remove(row + 2);
+                tm.fireTableDataChanged();
+                tTasks.setRowSelectionInterval(row + 1, row + 1);
+            }
+        });
+        menu.add(menuItem);
+        menuItem = new JMenuItem("Удалить задание"); // UIManager.getIcon("Table.???")
+        menuItem.addActionListener(e -> {
+            int row = tTasks.getSelectedRow();
+            if (row > -1 && row < tTasks.getRowCount()) {
+                DefaultTableModel tm = (DefaultTableModel) tTasks.getModel();
+                tm.getDataVector().remove(row);
+                tm.fireTableDataChanged();
+            }
+        });
+        menu.add(menuItem);
+        tTasks.setComponentPopupMenu(menu);
 
         tTasks.addMouseListener(new MouseAdapter() {
-            @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
                     int row = ((JTable) e.getSource()).rowAtPoint(e.getPoint());
@@ -131,8 +171,17 @@ class Form extends JFrame implements WindowListener, Observer {
         RowSendComplete = true;
         TableSendComplete = true;
         CurrentRow = 0;
+        layerSelectDelay = 2000;
+        paused = false;
         setMinimumSize(new Dimension(720, 400));
         setTitle("MiniJetPro printer control");
+    }
+
+    private void onPauseAction() {
+        paused = !paused;
+        bPause.setText(paused ? "Продолжить" : "Пауза");
+        bPause.getModel().setPressed(paused);
+        if (cc != null) cc.setPause(paused);
     }
 
     private void onFolderChooseAction() {
@@ -151,6 +200,7 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onSendTestAction() {
+        clearStatus();
         SendCommand((int) spLayout.getValue(), "Тестовая строка", (int) spObjectCount.getValue(),
                 (int) spLabelsPerObject.getValue(), tCommand.getText());
     }
@@ -160,12 +210,14 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onSendActiveRowAction() {
+        clearStatus();
         if (tTasks.getRowCount() > 0 && tTasks.getSelectedRowCount() > 0) {
             SendTableRow(tTasks.getSelectedRow());
         }
     }
 
     private void onSendAllAction() {
+        clearStatus();
         SendTable();
     }
 
@@ -203,12 +255,7 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onPrinterPortChange() {
-        if (cc != null && cc.isPortOpened()) {
-            cc.deleteObservers();
-            cc.ClosePort();
-        }
-        cc = new ComCore(cbPrinterPort.getSelectedItem().toString());
-        cc.addObserver(this);
+        disconnect();
     }
 
     private void onCheckActiveAction() {
@@ -265,26 +312,44 @@ class Form extends JFrame implements WindowListener, Observer {
             lStatus2.setText(Integer.toString(cc.getPrintedObjects()));
             lStatus3.setText(Integer.toString(cc.getPrintedLabels()));
             lStatus4.setText(Integer.toString(cc.getLeftToPrint()));
-        } else {
-            lStatus1.setText("Недоступен");
-            lStatus2.setText("-");
-            lStatus3.setText("-");
-            lStatus4.setText("-");
         }
+    }
+
+    private void timerDisconnectAction() {
+        disconnect();
+        timerAutoDisconnect.stop();
+    }
+
+    private void clearStatus() {
+        lStatus1.setText("-");
+        lStatus2.setText("-");
+        lStatus3.setText("-");
+        lStatus4.setText("-");
+    }
+
+    private void disconnect() {
+        if (cc != null) cc.closePort();
     }
 
     private void SendCommand(int layout, String artikul, int objCount, int labelCount, String command) {
         RowSendComplete = false;
+        timerAutoDisconnect.stop();
+        if (cc == null) {
+            cc = new ComCore(cbPrinterPort.getSelectedItem().toString(), layerSelectDelay);
+            cc.addObserver(this);
+        } else {
+            cc.openPort(cbPrinterPort.getSelectedItem().toString());
+        }
         cc.setDebugLog(cbDebugLog.getModel().isSelected());
-        cc.SendData(layout, artikul, objCount, labelCount, command);
+        cc.sendData(layout, artikul, objCount, labelCount, command);
     }
 
     private void SendTableRow(int row) {
         SendCommand(Integer.valueOf((String) tTasks.getModel().getValueAt(row, 0)), // Layout to use
-                                    (String) tTasks.getModel().getValueAt(row, 1),  // user friendly label name
-                    Integer.valueOf((String) tTasks.getModel().getValueAt(row, 2)), // objects to print
-                    Integer.valueOf((String) tTasks.getModel().getValueAt(row, 3)), // labels per object
-                                    (String) tTasks.getModel().getValueAt(row, 4)); // printer command
+                (String) tTasks.getModel().getValueAt(row, 1),  // user friendly label name
+                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 2)), // objects to print
+                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 3)), // labels per object
+                (String) tTasks.getModel().getValueAt(row, 4)); // printer command
         if (row < tTasks.getRowCount() - 1) {
             tTasks.setRowSelectionInterval(row + 1, row + 1);
         } else {
@@ -340,25 +405,22 @@ class Form extends JFrame implements WindowListener, Observer {
                         row.add(arrStr[4].trim().toUpperCase()); // printer command
                         tm.addRow(row);
                     } else {
-                        textLog.append(String.format("Ошибка данных в строке №%d: %s\n", index, str));
+                        textLog.append(String.format("Ошибка данных в строке %d:'%s'\n", index, str));
                     }
                 }
                 br.close();
                 TableColumnModel tcm = tTasks.getColumnModel();
-                tcm.getColumn(0).setWidth(60);
-                tcm.getColumn(0).setMinWidth(60);
-                tcm.getColumn(0).setMaxWidth(100);
-                tcm.getColumn(1).setWidth(150);
-                tcm.getColumn(1).setMinWidth(100);
-                tcm.getColumn(2).setWidth(60);
-                tcm.getColumn(2).setMinWidth(60);
-                tcm.getColumn(2).setMaxWidth(100);
-                tcm.getColumn(3).setWidth(60);
-                tcm.getColumn(3).setMinWidth(60);
-                tcm.getColumn(3).setMaxWidth(100);
-                tcm.getColumn(4).setWidth(200);
-                tcm.getColumn(4).setMinWidth(200);
+                int[] tw = {60, 150, 60, 60, 250};
+                for (int i = 0; i < 5; i++) {
+                    tcm.getColumn(i).setWidth(tw[i]);
+                    tcm.getColumn(i).setMinWidth(tw[i]);
+                    tcm.getColumn(i).setMaxWidth(tw[i]*4);
+                }
+                tcm.getColumn(2).setCellEditor(new DefaultCellEditor(new JTextField()));
+
                 tTasks.setDefaultEditor(tTasks.getColumnClass(0), null);
+                tTasks.getTableHeader().setDefaultRenderer(new DefaultTableCellHeaderRenderer());
+                tTasks.setGridColor(Color.GRAY);
                 tTasks.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
                 if (tTasks.getRowCount() > 0) {
                     textLog.append(String.format("Загружены задания из файла: %s\n", fLoad.getName()));
@@ -379,11 +441,14 @@ class Form extends JFrame implements WindowListener, Observer {
         String str = (String) arg;
         textLog.append(str);
         if (str.endsWith("(ON)\n")) {
-            SetInterface(false);
-            timerStatus.start();
+            if (!timerStatus.isRunning()) {
+                SetInterface(false);
+                timerStatus.start();
+            }
         } else if (str.endsWith("(OFF)\n")) {
             SetInterface(true);
             timerStatus.stop();
+            timerAutoDisconnect.start();
             timerStatusAction();
             RowSendComplete = true;
         }
@@ -396,6 +461,8 @@ class Form extends JFrame implements WindowListener, Observer {
         cbActive.setEnabled(mode);
         tCommand.setEnabled(mode);
         spObjectCount.setEnabled(mode);
+        spLabelsPerObject.setEnabled(mode);
+        spLayout.setEnabled(mode);
         bLoadTasks.setEnabled(mode);
         bSendActiveString.setEnabled(mode);
         bSendAll.setEnabled(mode);
@@ -418,6 +485,7 @@ class Form extends JFrame implements WindowListener, Observer {
             prefs.put("MiniJetPro", "SaveLog", false);
             prefs.put("MiniJetPro", "WinXPos", 1);
             prefs.put("MiniJetPro", "WinYPos", 1);
+            prefs.put("MiniJetPro", "LayerSelectDelay", 2000);
             prefs.put("MiniJetPro", "WinXSize", 720);
             prefs.put("MiniJetPro", "WinYSize", 400);
         }
@@ -452,6 +520,9 @@ class Form extends JFrame implements WindowListener, Observer {
         if (prefs.get("MiniJetPro", "SaveLog", Boolean.class) != null) {
             cbSaveLogToFile.setSelected(prefs.get("MiniJetPro", "SaveLog", Boolean.class));
         }
+        if (prefs.get("MiniJetPro", "LayerSelectDelay", Integer.class) != null) {
+            layerSelectDelay = prefs.get("MiniJetPro", "LayerSelectDelay", Integer.class);
+        }
         if (prefs.get("MiniJetPro", "WinXPos", Integer.class) != null) {
             this.setLocation(prefs.get("MiniJetPro", "WinXPos", Integer.class), prefs.get("MiniJetPro", "WinYPos", Integer.class));
         } else {
@@ -477,6 +548,7 @@ class Form extends JFrame implements WindowListener, Observer {
                 prefs.put("MiniJetPro", "LabelsPerObject", spLabelsPerObject.getValue());
                 prefs.put("MiniJetPro", "PrintLayout", spLayout.getValue());
                 prefs.put("MiniJetPro", "SaveLog", cbSaveLogToFile.getModel().isSelected());
+                prefs.put("MiniJetPro", "LayerSelectDelay", layerSelectDelay);
                 prefs.put("MiniJetPro", "WinXPos", this.getLocationOnScreen().x);
                 prefs.put("MiniJetPro", "WinYPos", this.getLocationOnScreen().y);
                 prefs.put("MiniJetPro", "WinXSize", this.getSize().width);
@@ -513,5 +585,4 @@ class Form extends JFrame implements WindowListener, Observer {
         frame.pack();
         frame.setVisible(true);
     }
-
 }

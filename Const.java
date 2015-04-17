@@ -20,7 +20,7 @@ class Const {
     public static final byte B_FINISH = 0x0D;
 
     public static final byte BR_OK = 0x01;
-    public static final byte BR_PE = 0x06;
+    public static final byte BR_PrintEnd = 0x06;
 
     public static final byte BIT_PRINT = 0x01;
     public static final byte BIT_PHOTO = 0x02;
