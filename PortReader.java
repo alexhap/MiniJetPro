@@ -18,7 +18,7 @@ class PortReader extends Observable implements SerialPortEventListener {
 
     public void serialEvent(SerialPortEvent event) {
         try {
-            Thread.sleep(20);
+            Thread.sleep(20); // helps with packet defragmentation, practically selected. values < 10 -> many broken packets.
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

@@ -10,9 +10,9 @@ import java.util.Observer;
 import jssc.SerialPort;
 import jssc.SerialPortException;
 
-class ComCore extends Observable implements Observer{
-    private static SerialPort serialPort;
-    private static PortReader portReader;
+class ComCore extends Observable implements Observer {
+    private SerialPort serialPort;
+//    private static PortReader portReader;
     private boolean stopFlag; // MiniJetPro duplicates last returned "print-end flag" in answer on STOP_PRINT command.
     private byte[] fragment;  // array for manipulating with fragmented packets
     private String commandBuffer; // command to execute after layout selection
@@ -25,14 +25,14 @@ class ComCore extends Observable implements Observer{
     private boolean debugLog;
     private boolean paused;
 
-    public ComCore(String portName, int layerDelay) {
+    public ComCore(int layerDelay) {
         stopFlag = false;
         printActive = false;
         debugLog = false;
         commandBuffer = "";
-        portReader = null;
+//        portReader = null;
         layerSelectDelay = layerDelay;
-        openPort(portName);
+        paused = false;
     }
 
     public void setPause(boolean value) {
@@ -72,7 +72,7 @@ class ComCore extends Observable implements Observer{
                 toPrintLabels = labelCount;
                 printedLabels = 0;
                 if (layout == -1 || command.equals(Const.strSend(Const.B_READ_STATUS))) {
-                    if (debugLog) toLog(String.format("=> Отправка команды (%s)", command));
+                    if (debugLog) toLog(String.format("=> Отправка команды: %s", command));
                     serialPort.writeBytes(strToHex(command));
                     commandBuffer = "";
                 } else {
@@ -84,16 +84,17 @@ class ComCore extends Observable implements Observer{
                         strSend = Const.strSend(Const.B_SELECT_MESSAGE_3, layout, 3);
                     }
                     serialPort.writeBytes(strToHex(strSend));
-                    String str = String.format("=> Шаблон: %d, Кол-во: %d по %d, Артикул: %s", layout, objCount, labelCount, artikul);
+                    String str = String.format("=> Шаблон: %d, Кол-во: %d (по %d макета на каждом), Артикул: %s", layout, objCount, labelCount, artikul);
                     if (debugLog) str = str.concat(String.format(", команда: %s", strSend));
+                    if (debugLog) str = str.concat(String.format(",\n\tотложенная команда: %s", commandBuffer));
                     toLog(str);
                 }
             } else {
                 serialPort.writeBytes(strToHex(command));
-                toLog(String.format("=> %s", command));
+                if (debugLog) toLog(String.format("=> %s", command));
             }
         } catch (SerialPortException ex) {
-//            ex.printStackTrace();
+            if (debugLog) ex.printStackTrace();
             toLog(String.format("!! Ошибка COM порта при отправке команды (%s-%s)", ex.getMessage(), ex.getMethodName()));
             printActive = false;
         }
@@ -255,39 +256,59 @@ class ComCore extends Observable implements Observer{
         }
     }
 
-    public void closePort() {
+    public void suspendCore() {
         try {
-            if (serialPort != null) {
-                if (serialPort.isOpened()) {
-                    toLog(String.format("-- Соединение по порту %s завершено.", serialPort.getPortName()));
-                    serialPort.removeEventListener();
-                    serialPort.closePort();
-                }
+            if (serialPort != null && serialPort.isOpened()) {
+                toLog(String.format("-- Отключение порта %s...", serialPort.getPortName()));
+                serialPort.closePort();
             }
         } catch (SerialPortException ex) {
-            ex.printStackTrace();
+            toLog("-- Ошибка отключение порта.");
+            if (debugLog) ex.printStackTrace();
         }
     }
 
-    public void openPort(String portName) {
-        if (serialPort != null && serialPort.isOpened() && !portName.equals(serialPort.getPortName()))
-            closePort();
+    public void stopCore() {
+        suspendCore();
+        serialPort = null;
+    }
+
+    public boolean startCore(String portName) {
+        boolean res = true;
+        if (serialPort != null && !serialPort.getPortName().equals(portName)) {
+            stopCore();
+        }
         try {
             if (serialPort == null) {
+                toLog(String.format("-- Подготовка к подключению по порту %s...", portName));
                 serialPort = new SerialPort(portName);
-                portReader = new PortReader(serialPort);
-                portReader.addObserver(this);
             }
             if (!serialPort.isOpened()) {
                 serialPort.openPort();
+                toLog(String.format("-- Открытие порта %s...", serialPort.getPortName()));
                 serialPort.setParams(SerialPort.BAUDRATE_38400, SerialPort.DATABITS_8, SerialPort.STOPBITS_1, SerialPort.PARITY_NONE);
                 serialPort.setFlowControlMode(SerialPort.FLOWCONTROL_XONXOFF_IN | SerialPort.FLOWCONTROL_XONXOFF_OUT);
+                PortReader portReader = new PortReader(serialPort);
                 serialPort.addEventListener(portReader, SerialPort.MASK_RXCHAR);
-                toLog(String.format("-- Соединение по порту %s установлено.", portName));
+                portReader.addObserver(this);
+                int countTry = 3;
+                while (!portReader.hasChanged() && countTry -- > 0) {
+                    sendData(0, "", 0, 0, Const.strSend(Const.B_READ_STATUS));
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                res = portReader.hasChanged();
+                if (debugLog) toLog(String.format("-- получен ответ от принтера после %d попытки: %b", 3 - countTry, res));
             }
         } catch (SerialPortException ex) {
-            ex.printStackTrace();
+            res = false;
+            if (debugLog) ex.printStackTrace();
+            stopCore();
         }
+        return res;
     }
 
     public void setDebugLog(boolean mode) {
@@ -295,6 +316,7 @@ class ComCore extends Observable implements Observer{
     }
 
     public void update(Observable pr, Object arg) {
+        if (debugLog) toLog(String.format("получен ответ: %s", hexToStr((byte[]) arg)));
         receiveData((byte[]) arg);
     }
 

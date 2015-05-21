@@ -38,7 +38,7 @@ class Const {
     public static final byte B_SET_VARIABLE_1 = 0x56; // 'V'
 
     private static final DisplayValue S_HEADER_SEND = new DisplayValue("162A010250");
-//    public static final DisplayValue S_HEADER_RECEIVE = new DisplayValue("163B");
+//    private static final DisplayValue S_HEADER_RECEIVE = new DisplayValue("163B");
     private static final DisplayValue S_ENDING = new DisplayValue("0D");
 
     private static String toString(byte b) {

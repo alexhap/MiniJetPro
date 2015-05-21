@@ -49,24 +49,26 @@ class Form extends JFrame implements WindowListener, Observer {
     private final Timer timerMonitor;
     private final Timer timerSend;
     private final Timer timerStatus;
-    private final Timer timerAutoDisconnect;
+    private final Timer timerAutoSuspend;
     private JPopupMenu menu;
 
     private boolean RowSendComplete;
     private boolean TableSendComplete;
     private int CurrentRow;
-    private static ComCore cc = null;
+    private ComCore cc = null;
     private int layerSelectDelay;
     private boolean paused;
 
     @Override
     public void windowOpened(WindowEvent e) {
         LoadSettings();
+        cc = new ComCore(layerSelectDelay);
+        cc.addObserver(this);
     }
 
     @Override
     public void windowClosing(WindowEvent e) {
-        disconnect();
+        stopCore();
         if (cc != null) cc.deleteObservers();
         cc = null;
         SaveSettings();
@@ -97,8 +99,8 @@ class Form extends JFrame implements WindowListener, Observer {
         this.addWindowListener(this);
 
         bFolderChoose.addActionListener(e -> onFolderChooseAction());
-        bSendTest.addActionListener(e -> onSendTestAction());
         bLoadTasks.addActionListener(e -> onLoadTaskAction());
+        bSendTest.addActionListener(e -> onSendTestAction());
         bSendActiveString.addActionListener(e -> onSendActiveRowAction());
         bSendAll.addActionListener(e -> onSendAllAction());
         bStop.addActionListener(e -> onStopAction());
@@ -109,10 +111,10 @@ class Form extends JFrame implements WindowListener, Observer {
         spLayout.addChangeListener(e -> onLayoutChange());
         cbPrinterPort.addActionListener(e -> onPrinterPortChange());
         cbActive.addActionListener(e -> onCheckActiveAction());
-        timerSend = new Timer(100, e -> timerSendAction());
-        timerMonitor = new Timer(500, e -> timerMonitorAction());
-        timerStatus = new Timer(333, e -> timerStatusAction());
-        timerAutoDisconnect = new Timer(2000, e -> timerDisconnectAction());
+        timerSend = new Timer(100, e -> timerSendAction()); // from row to next row latency
+        timerMonitor = new Timer(500, e -> timerMonitorAction()); // timer monitoring for a new file
+        timerStatus = new Timer(333, e -> timerStatusAction()); // for status show
+        timerAutoSuspend = new Timer(5000, e -> timerSuspendAction()); // no work -> disconnect (printer is less buggy with it)
 
         menu = new JPopupMenu();
         JMenuItem menuItem = new JMenuItem("Сдвинуть вверх"); //UIManager.getIcon("Table.ascendingSortIcon")
@@ -168,10 +170,10 @@ class Form extends JFrame implements WindowListener, Observer {
         textLog.setFont(textLog.getFont().deriveFont(NORMAL, 12));
         ((DefaultCaret) textLog.getCaret()).setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
 
+        layerSelectDelay = 1200; // time for executing B_SELECT_MESSAGE (layer) BEFORE your command
         RowSendComplete = true;
         TableSendComplete = true;
         CurrentRow = 0;
-        layerSelectDelay = 2000;
         paused = false;
         setMinimumSize(new Dimension(720, 400));
         setTitle("MiniJetPro printer control");
@@ -222,6 +224,14 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onStopAction() {
+        if (paused) {
+            onPauseAction(); // pause off, because it is the same command Stop for printer
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
         timerMonitor.stop();
         timerSend.stop();
         RowSendComplete = true;
@@ -255,7 +265,7 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void onPrinterPortChange() {
-        disconnect();
+        suspendCore();
     }
 
     private void onCheckActiveAction() {
@@ -315,9 +325,9 @@ class Form extends JFrame implements WindowListener, Observer {
         }
     }
 
-    private void timerDisconnectAction() {
-        disconnect();
-        timerAutoDisconnect.stop();
+    private void timerSuspendAction() {
+        suspendCore();
+        timerAutoSuspend.stop();
     }
 
     private void clearStatus() {
@@ -327,29 +337,31 @@ class Form extends JFrame implements WindowListener, Observer {
         lStatus4.setText("-");
     }
 
-    private void disconnect() {
-        if (cc != null) cc.closePort();
+    private void suspendCore() {
+        if (cc != null) cc.suspendCore();
+    }
+
+    private void stopCore() {
+        if (cc != null) cc.stopCore();
     }
 
     private void SendCommand(int layout, String artikul, int objCount, int labelCount, String command) {
         RowSendComplete = false;
-        timerAutoDisconnect.stop();
-        if (cc == null) {
-            cc = new ComCore(cbPrinterPort.getSelectedItem().toString(), layerSelectDelay);
-            cc.addObserver(this);
-        } else {
-            cc.openPort(cbPrinterPort.getSelectedItem().toString());
-        }
+        timerAutoSuspend.stop();
         cc.setDebugLog(cbDebugLog.getModel().isSelected());
-        cc.sendData(layout, artikul, objCount, labelCount, command);
+        if (cc != null && cc.startCore(cbPrinterPort.getSelectedItem().toString())) {
+            cc.sendData(layout, artikul, objCount, labelCount, command);
+        } else {
+            textLog.append(String.format("Запуск модуля отправки для %s не удался.\n", cbPrinterPort.getSelectedItem().toString()));
+        }
     }
 
     private void SendTableRow(int row) {
         SendCommand(Integer.valueOf((String) tTasks.getModel().getValueAt(row, 0)), // Layout to use
-                (String) tTasks.getModel().getValueAt(row, 1),  // user friendly label name
-                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 2)), // objects to print
-                Integer.valueOf((String) tTasks.getModel().getValueAt(row, 3)), // labels per object
-                (String) tTasks.getModel().getValueAt(row, 4)); // printer command
+                                    (String) tTasks.getModel().getValueAt(row, 1),  // user friendly label name
+                    Integer.valueOf((String) tTasks.getModel().getValueAt(row, 2)), // objects to print
+                    Integer.valueOf((String) tTasks.getModel().getValueAt(row, 3)), // labels per object
+                                    (String) tTasks.getModel().getValueAt(row, 4)); // printer command
         if (row < tTasks.getRowCount() - 1) {
             tTasks.setRowSelectionInterval(row + 1, row + 1);
         } else {
@@ -417,7 +429,6 @@ class Form extends JFrame implements WindowListener, Observer {
                     tcm.getColumn(i).setMaxWidth(tw[i]*4);
                 }
                 tcm.getColumn(2).setCellEditor(new DefaultCellEditor(new JTextField()));
-
                 tTasks.setDefaultEditor(tTasks.getColumnClass(0), null);
                 tTasks.getTableHeader().setDefaultRenderer(new DefaultTableCellHeaderRenderer());
                 tTasks.setGridColor(Color.GRAY);
@@ -437,7 +448,7 @@ class Form extends JFrame implements WindowListener, Observer {
         return result;
     }
 
-    public void update(Observable pr, Object arg) {
+    public void update(Observable pr, Object arg) { // arg need to be upgraded to new structured class.
         String str = (String) arg;
         textLog.append(str);
         if (str.endsWith("(ON)\n")) {
@@ -448,7 +459,7 @@ class Form extends JFrame implements WindowListener, Observer {
         } else if (str.endsWith("(OFF)\n")) {
             SetInterface(true);
             timerStatus.stop();
-            timerAutoDisconnect.start();
+            timerAutoSuspend.start();
             timerStatusAction();
             RowSendComplete = true;
         }
@@ -470,105 +481,107 @@ class Form extends JFrame implements WindowListener, Observer {
     }
 
     private void LoadSettings() {
-        Ini prefs;
+        Ini settings;
+        String iniGroup = "MiniJetPro";
         try {
-            prefs = new Ini(new File("Config.ini"));
+            settings = new Ini(new File("Config.ini"));
         } catch (IOException e) {
-            prefs = new Ini();
-            prefs.put("MiniJetPro", "PrinterPort", 0);
-            prefs.put("MiniJetPro", "FolderToMonitor", "");
-            prefs.put("MiniJetPro", "ActiveMonitoring", false);
-            prefs.put("MiniJetPro", "Command", "162A010250530D");
-            prefs.put("MiniJetPro", "ObjectCount", 1);
-            prefs.put("MiniJetPro", "LabelsPerObject", 1);
-            prefs.put("MiniJetPro", "PrintLayout", 1);
-            prefs.put("MiniJetPro", "SaveLog", false);
-            prefs.put("MiniJetPro", "WinXPos", 1);
-            prefs.put("MiniJetPro", "WinYPos", 1);
-            prefs.put("MiniJetPro", "LayerSelectDelay", 2000);
-            prefs.put("MiniJetPro", "WinXSize", 720);
-            prefs.put("MiniJetPro", "WinYSize", 400);
+            settings = new Ini();
+            settings.put(iniGroup, "PrinterPort", 0);
+            settings.put(iniGroup, "FolderToMonitor", "");
+            settings.put(iniGroup, "ActiveMonitoring", false);
+            settings.put(iniGroup, "Command", "162A010250530D");
+            settings.put(iniGroup, "ObjectCount", 1);
+            settings.put(iniGroup, "LabelsPerObject", 1);
+            settings.put(iniGroup, "PrintLayout", 1);
+            settings.put(iniGroup, "SaveLog", false);
+            settings.put(iniGroup, "WinXPos", 1);
+            settings.put(iniGroup, "WinYPos", 1);
+            settings.put(iniGroup, "LayerSelectDelay", 1200);
+            settings.put(iniGroup, "WinXSize", 720);
+            settings.put(iniGroup, "WinYSize", 400);
         }
-        if (prefs.get("MiniJetPro", "PrinterPort", Integer.class) != null) {
-            cbPrinterPort.setSelectedIndex(prefs.get("MiniJetPro", "PrinterPort", Integer.class));
+        if (settings.get(iniGroup, "PrinterPort", Integer.class) != null) {
+            cbPrinterPort.setSelectedIndex(settings.get(iniGroup, "PrinterPort", Integer.class));
         }
-        String folder = prefs.get("MiniJetPro", "FolderToMonitor", String.class);
+        String folder = settings.get(iniGroup, "FolderToMonitor", String.class);
         if (!folder.equals("")) {
             File f = new File(folder);
             if (f.exists()) {
                 tFolderToMonitor.setText(folder);
-                if (prefs.get("MiniJetPro", "ActiveMonitoring", Boolean.class) != null) {
-                    cbActive.setSelected(prefs.get("MiniJetPro", "ActiveMonitoring", Boolean.class));
+                if (settings.get(iniGroup, "ActiveMonitoring", Boolean.class) != null) {
+                    cbActive.setSelected(settings.get(iniGroup, "ActiveMonitoring", Boolean.class));
                     if (cbActive.getModel().isSelected()) {
                         timerMonitor.start();
                     }
                 }
             }
         }
-        if (prefs.get("MiniJetPro", "Command", String.class) != null) {
-            tCommand.setText(prefs.get("MiniJetPro", "Command", String.class));
+        if (settings.get(iniGroup, "Command", String.class) != null) {
+            tCommand.setText(settings.get(iniGroup, "Command", String.class));
         }
-        if (prefs.get("MiniJetPro", "ObjectCount", Integer.class) != null) {
-            spObjectCount.setValue(prefs.get("MiniJetPro", "ObjectCount", Integer.class));
+        if (settings.get(iniGroup, "ObjectCount", Integer.class) != null) {
+            spObjectCount.setValue(settings.get(iniGroup, "ObjectCount", Integer.class));
         }
-        if (prefs.get("MiniJetPro", "LabelsPerObject", Integer.class) != null) {
-            spLabelsPerObject.setValue(prefs.get("MiniJetPro", "LabelsPerObject", Integer.class));
+        if (settings.get(iniGroup, "LabelsPerObject", Integer.class) != null) {
+            spLabelsPerObject.setValue(settings.get(iniGroup, "LabelsPerObject", Integer.class));
         }
-        if (prefs.get("MiniJetPro", "PrintLayout", Integer.class) != null) {
-            spLayout.setValue(prefs.get("MiniJetPro", "PrintLayout", Integer.class));
+        if (settings.get(iniGroup, "PrintLayout", Integer.class) != null) {
+            spLayout.setValue(settings.get(iniGroup, "PrintLayout", Integer.class));
         }
-        if (prefs.get("MiniJetPro", "SaveLog", Boolean.class) != null) {
-            cbSaveLogToFile.setSelected(prefs.get("MiniJetPro", "SaveLog", Boolean.class));
+        if (settings.get(iniGroup, "SaveLog", Boolean.class) != null) {
+            cbSaveLogToFile.setSelected(settings.get(iniGroup, "SaveLog", Boolean.class));
         }
-        if (prefs.get("MiniJetPro", "LayerSelectDelay", Integer.class) != null) {
-            layerSelectDelay = prefs.get("MiniJetPro", "LayerSelectDelay", Integer.class);
+        if (settings.get(iniGroup, "LayerSelectDelay", Integer.class) != null) {
+            layerSelectDelay = settings.get(iniGroup, "LayerSelectDelay", Integer.class);
         }
-        if (prefs.get("MiniJetPro", "WinXPos", Integer.class) != null) {
-            this.setLocation(prefs.get("MiniJetPro", "WinXPos", Integer.class), prefs.get("MiniJetPro", "WinYPos", Integer.class));
+        if (settings.get(iniGroup, "WinXPos", Integer.class) != null) {
+            this.setLocation(settings.get(iniGroup, "WinXPos", Integer.class), settings.get(iniGroup, "WinYPos", Integer.class));
         } else {
             this.setLocation(100, 60);
         }
-        if (prefs.get("MiniJetPro", "WinXSize", Integer.class) != null) {
-            this.setSize(prefs.get("MiniJetPro", "WinXSize", Integer.class), prefs.get("MiniJetPro", "WinYSize", Integer.class));
+        if (settings.get(iniGroup, "WinXSize", Integer.class) != null) {
+            this.setSize(settings.get(iniGroup, "WinXSize", Integer.class), settings.get(iniGroup, "WinYSize", Integer.class));
         } else {
             this.setSize(720, 400);
         }
     }
 
     private void SaveSettings() {
-        File f = new File("Config.ini");
+        File iniFile = new File("Config.ini");
+        String iniGroup = "MiniJetPro";
         try {
-            if (f.exists() || f.createNewFile()) {
-                Ini prefs = new Ini(f);
-                prefs.put("MiniJetPro", "PrinterPort", cbPrinterPort.getSelectedIndex());
-                prefs.put("MiniJetPro", "FolderToMonitor", tFolderToMonitor.getText());
-                prefs.put("MiniJetPro", "ActiveMonitoring", cbActive.getModel().isSelected());
-                prefs.put("MiniJetPro", "Command", tCommand.getText());
-                prefs.put("MiniJetPro", "ObjectCount", spObjectCount.getValue());
-                prefs.put("MiniJetPro", "LabelsPerObject", spLabelsPerObject.getValue());
-                prefs.put("MiniJetPro", "PrintLayout", spLayout.getValue());
-                prefs.put("MiniJetPro", "SaveLog", cbSaveLogToFile.getModel().isSelected());
-                prefs.put("MiniJetPro", "LayerSelectDelay", layerSelectDelay);
-                prefs.put("MiniJetPro", "WinXPos", this.getLocationOnScreen().x);
-                prefs.put("MiniJetPro", "WinYPos", this.getLocationOnScreen().y);
-                prefs.put("MiniJetPro", "WinXSize", this.getSize().width);
-                prefs.put("MiniJetPro", "WinYSize", this.getSize().height);
-                prefs.store(f);
+            if (iniFile.exists() || iniFile.createNewFile()) {
+                Ini settings = new Ini(iniFile);
+                settings.put(iniGroup, "PrinterPort", cbPrinterPort.getSelectedIndex());
+                settings.put(iniGroup, "FolderToMonitor", tFolderToMonitor.getText());
+                settings.put(iniGroup, "ActiveMonitoring", cbActive.getModel().isSelected());
+                settings.put(iniGroup, "Command", tCommand.getText());
+                settings.put(iniGroup, "ObjectCount", spObjectCount.getValue());
+                settings.put(iniGroup, "LabelsPerObject", spLabelsPerObject.getValue());
+                settings.put(iniGroup, "PrintLayout", spLayout.getValue());
+                settings.put(iniGroup, "SaveLog", cbSaveLogToFile.getModel().isSelected());
+                settings.put(iniGroup, "LayerSelectDelay", layerSelectDelay);
+                settings.put(iniGroup, "WinXPos", this.getLocationOnScreen().x);
+                settings.put(iniGroup, "WinYPos", this.getLocationOnScreen().y);
+                settings.put(iniGroup, "WinXSize", this.getSize().width);
+                settings.put(iniGroup, "WinYSize", this.getSize().height);
+                settings.store(iniFile);
             }
         } catch (IOException e) {
-            textLog.append(String.format("Ошибка записи файла настроек %s\n", f.getName()));
+            textLog.append(String.format("Ошибка записи файла настроек %s\n", iniFile.getName()));
         }
     }
 
     private void SaveLogToFile() {
         if (cbSaveLogToFile.getModel().isSelected() && textLog.getLineCount() > 1) {
-            String logFileName = new SimpleDateFormat("yyyy.MM.dd-HH.mm.ss").format(new Date());
+            String logFileName = new SimpleDateFormat("yyyy.MM.dd-HH.mm.ss").format(new Date()).concat(".log");
             try {
-                FileWriter f = new FileWriter(tFolderToMonitor.getText().concat(File.separator).concat(logFileName).concat(".log"));
+                FileWriter f = new FileWriter(tFolderToMonitor.getText().concat(File.separator).concat(logFileName));
                 f.write(textLog.getText());
                 f.close();
             } catch (IOException e1) {
-                textLog.append(String.format("Ошибка записи файла журнала событий %s\n", logFileName.concat(".log")));
+                textLog.append(String.format("Ошибка записи файла журнала событий %s\n", logFileName));
             }
         }
     }
